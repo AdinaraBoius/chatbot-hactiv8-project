@@ -40,7 +40,7 @@ Ini adalah proyek *final project* untuk program "Maju Bareng AI" dari Hacktiv8. 
     Jalankan aplikasi dengan perintah berikut:
 
     ```bash
-    streamlit run app.py
+    streamlit run streamlit_chat_app.py
     ```
 
     Aplikasi akan otomatis terbuka di browser Anda. Masukkan Google AI API Key Anda di sidebar untuk memulai percakapan.
