@@ -1,130 +1,230 @@
-# Import the necessary libraries
-import streamlit as st  # For creating the web app interface
-from google import genai  # For interacting with the Google Gemini API
+# app.py
+import streamlit as st
+from google import genai
+from google.genai import types
 
-# --- 1. Page Configuration and Title ---
+# -------------------------
+# Page config
+# -------------------------
+st.set_page_config(
+    page_title="Asisten Anime", 
+    page_icon="🤖", 
+    layout="centered",
+)
 
-# Set the title and a caption for the web page
-st.title("💬 Gemini Chatbot")
-st.caption("A simple and friendly chat using Google's Gemini Flash model")
-
-# --- 2. Sidebar for Settings ---
-
-# Create a sidebar section for app settings using 'with st.sidebar:'
+# -------------------------
+# Sidebar: API key, reset, theme
+# -------------------------
 with st.sidebar:
-    # Add a subheader to organize the settings
-    st.subheader("Settings")
-    
-    # Create a text input field for the Google AI API Key.
-    # 'type="password"' hides the key as the user types it.
-    google_api_key = st.text_input("Google AI API Key", type="password")
-    
-    # Create a button to reset the conversation.
-    # 'help' provides a tooltip that appears when hovering over the button.
-    reset_button = st.button("Reset Conversation", help="Clear all messages and start fresh")
+    st.markdown("<h3 style='text-align:center;color:#FF6B81;margin:6px 0'>🤖 Anime Assistant</h3>", unsafe_allow_html=True)
+    st.markdown("### ⚙️ Settings")
+    google_api_key = st.text_input("Google AI API Key", type="password", help="Masukkan Google GenAI API key")
+    st.markdown("---")
+    reset_button = st.button("🔄 Reset Conversation", use_container_width=True)
+    st.markdown("Tip: gunakan tombol Reset untuk memulai percakapan baru.")
 
-# --- 3. API Key and Client Initialization ---
-
-# Check if the user has provided an API key.
-# If not, display an informational message and stop the app from running further.
 if not google_api_key:
     st.info("Please add your Google AI API key in the sidebar to start chatting.", icon="🗝️")
     st.stop()
 
-# This block of code handles the creation of the Gemini API client.
-# It's designed to be efficient: it only creates a new client if one doesn't exist
-# or if the user has changed the API key in the sidebar.
-
-# We use `st.session_state` which is Streamlit's way of "remembering" variables
-# between user interactions (like sending a message or clicking a button).
-
-# Condition 1: "genai_client" not in st.session_state
-# Checks if we have *never* created the client before.
-#
-# Condition 2: getattr(st.session_state, "_last_key", None) != google_api_key
-# This is a safe way to check if the current API key is different from the last one we used.
-# `getattr(object, 'attribute_name', default_value)` tries to get an attribute from an object.
-# If the attribute doesn't exist, it returns the default value (in this case, `None`).
-# So, it checks: "Is the key stored in memory different from the one in the input box?"
+# -------------------------
+# Init client (recreate if key changed)
+# -------------------------
 if ("genai_client" not in st.session_state) or (getattr(st.session_state, "_last_key", None) != google_api_key):
     try:
-        # If the conditions are met, create a new client.
         st.session_state.genai_client = genai.Client(api_key=google_api_key)
-        # Store the new key in session state to compare against later.
         st.session_state._last_key = google_api_key
-        # Since the key changed, we must clear the old chat and message history.
-        # .pop() safely removes an item from session_state.
         st.session_state.pop("chat", None)
         st.session_state.pop("messages", None)
     except Exception as e:
-        # If the key is invalid, show an error and stop.
-        st.error(f"Invalid API Key: {e}")
+        st.error(f"Failed to init GenAI client: {e}")
         st.stop()
 
+client = st.session_state.genai_client
 
-# --- 4. Chat History Management ---
+# -------------------------
+# Persona / system instruction
+# -------------------------
+SYSTEM_PERSONA = (
+    "You are a knowledgeable and professional anime recommendation assistant.\n"
+    "Your primary goal is to help users find anime they will enjoy.\n"
+    "- Provide clear, concise, and helpful recommendations.\n"
+    "- If a user asks for a recommendation, ask clarifying questions to understand their preferences "
+    "(e.g., favorite genres, what they liked about other shows).\n"
+    "- When giving a recommendation, provide a brief, spoiler-free synopsis and mention why the user might like it based on their preferences.\n"
+    "- Do not use overly casual slang or cringy otaku stereotypes. Maintain a helpful and expert tone.\n"
+    "- Your knowledge covers a wide range of genres and eras, from classic to modern anime."
+)
 
-# Initialize the chat session if it doesn't already exist in memory.
+# -------------------------
+# Create or restore chat (use system_instruction in config)
+# -------------------------
 if "chat" not in st.session_state:
-    # Create a new chat instance using the 'gemini-2.5-flash' model.
-    st.session_state.chat = st.session_state.genai_client.chats.create(model="gemini-2.5-flash")
+    try:
+        st.session_state.chat = client.chats.create(
+            model="gemini-2.5-flash",
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_PERSONA)
+        )
+    except Exception as e:
+        st.error(f"Failed to create chat session: {e}")
+        st.stop()
 
-# Initialize the message history (as a list) if it doesn't exist.
+# -------------------------
+# Messages state
+# -------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Handle the reset button click.
+# handle reset
 if reset_button:
-    # If the reset button is clicked, clear the chat object and message history from memory.
     st.session_state.pop("chat", None)
     st.session_state.pop("messages", None)
-    # st.rerun() tells Streamlit to refresh the page from the top.
     st.rerun()
 
-# --- 5. Display Past Messages ---
+TITLE_COLOR = "#FF6B81"
 
-# Loop through every message currently stored in the session state.
+# -------------------------
+# Header
+# -------------------------
+st.markdown(f"<h2 style='text-align:center;color:{TITLE_COLOR};margin:6px 0'>🎌 Asisten Rekomendasi Anime</h2>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center;color:#8A95A1;margin-bottom:14px'>Temukan anime yang cocok — singkat, spoiler-free, dan relevan.</div>", unsafe_allow_html=True)
+
+# -------------------------
+# Unified chat bubble CSS (Auto-adapting)
+# -------------------------
+CHAT_CSS = """
+<style>
+/* Container utama untuk semua gelembung chat */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding-bottom: 20px;
+}
+
+/* Styling umum untuk setiap gelembung chat */
+.chat-bubble {
+    position: relative;
+    padding: 16px 20px;
+    border-radius: 18px;
+    line-height: 1.55;
+    max-width: 100%;
+    word-wrap: break-word;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.08); /* Menambah sedikit bayangan agar lebih 'terangkat' */
+    font-size: 1rem;
+    margin-top: 30px;
+}
+
+/* Styling untuk gelembung PENGGUNA (Biru Modern) */
+.chat-bubble.user {
+    align-self: flex-end; /* Rata kanan */
+    background: #0078FF;
+    color: #FFFFFF;
+    border-bottom-right-radius: 6px;
+}
+
+/* Styling untuk gelembung ASISTEN (Abu-abu Bersih) */
+.chat-bubble.assistant {
+    align-self: flex-start; /* Rata kiri */
+    color: var(--text-color);
+    border-bottom-left-radius: 6px;
+    background: #F0F2F6;
+}
+
+@media (prefers-color-scheme: dark) {
+    .chat-bubble.assistant {
+        background: #373A40; /* Abu-abu gelap */
+        /* Warna teks akan otomatis menjadi terang karena 'var(--text-color)' */
+    }
+}
+
+
+/* Styling untuk nama (di luar gelembung) */
+.chat-bubble .name {
+    position: absolute;
+    top: -22px;
+    font-size: 0.75rem;
+    color: var(--text-color);
+    opacity: 0.7;
+    font-weight: 600;
+    user-select: none;
+}
+
+.chat-bubble.user .name {
+    right: 8px;
+}
+
+.chat-bubble.assistant .name {
+    left: 8px;
+}
+</style>
+"""
+st.markdown(CHAT_CSS, unsafe_allow_html=True)
+
+# -------------------------
+# Render chat history dan handle input baru
+# -------------------------
+
+# Buka satu container utama untuk semua pesan
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+# Tampilkan pesan-pesan dari riwayat
 for msg in st.session_state.messages:
-    # For each message, create a chat message bubble with the appropriate role ("user" or "assistant").
-    with st.chat_message(msg["role"]):
-        # Display the content of the message using Markdown for nice formatting.
-        st.markdown(msg["content"])
+    role = msg.get("role", "user")
+    name = "You" if role == "user" else "Assistant"
+    content = msg.get("content", "")
+    # Wrapper div 'margin-top' DIHAPUS
+    st.markdown(f"""
+        <div class="chat-bubble {role}">
+            <div class="name">{name}</div>
+            {content}
+        </div>
+    """, unsafe_allow_html=True)
 
-# --- 6. Handle User Input and API Communication ---
+# Handle input baru dari pengguna
+prompt = st.chat_input("Tanya soal rekomendasi anime...")
 
-# Create a chat input box at the bottom of the page.
-# The user's typed message will be stored in the 'prompt' variable.
-prompt = st.chat_input("Type your message here...")
-
-# Check if the user has entered a message.
 if prompt:
-    # 1. Add the user's message to our message history list.
+    # Tambahkan dan tampilkan pesan baru pengguna
     st.session_state.messages.append({"role": "user", "content": prompt})
-    # 2. Display the user's message on the screen immediately for a responsive feel.
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    # Wrapper div 'margin-top' DIHAPUS
+    st.markdown(f"""
+        <div class="chat-bubble user">
+            <div class="name">You</div>
+            {prompt}
+        </div>
+    """, unsafe_allow_html=True)
 
-    # 3. Get the assistant's response.
-    # Use a 'try...except' block to gracefully handle potential errors (e.g., network issues, API errors).
+    # Buat placeholder untuk respons asisten
+    placeholder = st.empty()
+    thinking_html = """
+        <div class="chat-bubble assistant" style="opacity:0.7; font-style:italic;">
+            <div class="name">Assistant</div>
+            Thinking...
+        </div>
+    """
+    with placeholder.container():
+        st.markdown(thinking_html, unsafe_allow_html=True)
+    
+    # Kirim prompt ke API
     try:
-        # Send the user's prompt to the Gemini API.
-        response = st.session_state.chat.send_message(prompt)
-        
-        # Safely get the text from the response object.
-        # `hasattr(object, 'attribute_name')` checks if an object has a specific property.
-        # This prevents an error if the API response object doesn't have a '.text' attribute.
-        if hasattr(response, "text"):
-            answer = response.text
-        else:
-            # If there's no '.text', convert the whole response to a string as a fallback.
-            answer = str(response)
-
+        response = st.session_state.chat.send_message(message=prompt)
+        answer = response.text if hasattr(response, "text") and response.text else str(response)
     except Exception as e:
-        # If any error occurs, create an error message to display to the user.
-        answer = f"An error occurred: {e}"
+        answer = f"Terjadi kesalahan: {e}"
 
-    # 4. Display the assistant's response.
-    with st.chat_message("assistant"):
-        st.markdown(answer)
-    # 5. Add the assistant's response to the message history list.
+    # Ganti placeholder dengan respons asli
+    with placeholder.container():
+        # Wrapper div 'margin-top' DIHAPUS
+        st.markdown(f"""
+            <div class="chat-bubble assistant">
+                <div class="name">🎌 Assistant</div>
+                {answer}
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Simpan respons asisten ke session state
     st.session_state.messages.append({"role": "assistant", "content": answer})
+
+# Tutup container utama
+st.markdown('</div>', unsafe_allow_html=True)
