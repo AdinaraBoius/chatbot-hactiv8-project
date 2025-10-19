@@ -110,7 +110,7 @@ CHAT_CSS = """
     line-height: 1.55;
     max-width: 100%;
     word-wrap: break-word;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.08); /* Menambah sedikit bayangan agar lebih 'terangkat' */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
     font-size: 1rem;
     margin-top: 30px;
 }
